@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#pip install torch torchvision
+git clone https://github.com/bowang-lab/MedSAM.git && cd MedSAM
+pip install -e .
+cd ..
+
+pip install gradio==3.38.0
+pip install numpy==1.26.3 
+pip install ffmpeg-python 
+pip install moviepy
+pip install dask distributed zarr s3fs boto3 matplotlib pandas tifffile numpy scipy scikit-image dask-image
+pip install jupyterlab ipywidgets

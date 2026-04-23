@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+
+if [ "$#" -ne 4 ]; then
+  echo "Usage: $0 <S3_ZARR_PATH> <RES_488> <RES_561> <INFERENCE_CHANNEL>"
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+S3_ZARR_PATH="$1"
+RES_488="$2"
+RES_561="$3"
+INFERENCE_CHANNEL="$4"
+RAW_SAVE_DIR="/results/raw"
+MASK_SAVE_DIR="/results/mask"
+PRED_SAVE_DIR="/results/pred"
+POSTPROCESSED_SAVE_DIR="/results/postprocessed"
+
+case "$INFERENCE_CHANNEL" in
+  488|561) ;;
+  *)
+    echo "Error: INFERENCE_CHANNEL must be either 488 or 561, got '$INFERENCE_CHANNEL'"
+    exit 1
+    ;;
+esac
+
+rm -rf "$PRED_SAVE_DIR" "$POSTPROCESSED_SAVE_DIR"
+mkdir -p "$PRED_SAVE_DIR" "$POSTPROCESSED_SAVE_DIR"
+
+# Step 1: Preprocess
+python3 "$SCRIPT_DIR/inference_preprocess.py" \
+ --zarr "$S3_ZARR_PATH" \
+ --channel 488 \
+ --res "$RES_488" \
+ --raw-save-dir "$RAW_SAVE_DIR/488" \
+ --mask-save-dir "$MASK_SAVE_DIR/488"
+
+python3 "$SCRIPT_DIR/inference_preprocess.py" \
+ --zarr "$S3_ZARR_PATH" \
+ --channel 561 \
+ --res "$RES_561" \
+ --raw-save-dir "$RAW_SAVE_DIR/561" \
+ --mask-save-dir "$MASK_SAVE_DIR/561"
+
+# Step 2: Inference
+python3 "$SCRIPT_DIR/inference.py" \
+ --raw_tiff_path "${RAW_SAVE_DIR}/${INFERENCE_CHANNEL}" \
+ --mask_tiff_path "${MASK_SAVE_DIR}/${INFERENCE_CHANNEL}" \
+ --pred_save_dir "$PRED_SAVE_DIR"
+
+# Step 3: Postprocess
+python3 "$SCRIPT_DIR/postprocess_masks.py" \
+ --input_path "$PRED_SAVE_DIR" \
+ --output_dir "$POSTPROCESSED_SAVE_DIR" \
+ --raw_base_dir "/results/raw" \
+ --kernel_size 3

@@ -1,0 +1,45 @@
+{
+	"version": 1,
+	"attached_datasets": [
+		{
+			"id": "051ddcaa-f7d6-4ab2-9130-a6b26e1ada68",
+			"mount": "mask-training-2025-05-23"
+		},
+		{
+			"id": "15b6b22c-8bbd-409e-951d-668e279da735",
+			"mount": "754615-mask-training-data"
+		},
+		{
+			"id": "2dd28ac4-5809-4863-b4ad-9d37143dd41a",
+			"mount": "mask-training-data-2025-05-13"
+		},
+		{
+			"id": "3ba066c2-4c46-47f3-886d-410921ebcc6c",
+			"mount": "751474_mask-result-2025-06-02"
+		},
+		{
+			"id": "5129039d-ebba-49b9-a046-ba73eb4abbec",
+			"mount": "mask-training-data-2025-05-14"
+		},
+		{
+			"id": "a2a18c47-0d7c-4f73-a405-e7bf4455896e",
+			"mount": "mask-training-2025-05-31"
+		},
+		{
+			"id": "b0edd15e-1a5d-4408-8509-6da3dc38c497",
+			"mount": "mask-training-2025-05-15"
+		},
+		{
+			"id": "b6aa13b7-656e-406e-9098-eb4dd6a91085",
+			"mount": "754615_mask-result-2025-06-02"
+		},
+		{
+			"id": "b77dbf95-e463-4d26-a45a-5a5cc4bafa57",
+			"mount": "mask-result-2025-06-02"
+		},
+		{
+			"id": "d7bb0857-0c00-481d-8fa6-bf6048f0a114",
+			"mount": "mask-training-2025-05-16"
+		}
+	]
+}
