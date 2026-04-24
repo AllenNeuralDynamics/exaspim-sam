@@ -1,5 +1,6 @@
 # hash:sha256:cf56d04151eea4da4c8a5879a369b6929889e2582e33c04c1ce36656d3c88b6f
-FROM registry.codeocean.allenneuraldynamics.org/codeocean/ubuntu-desktop-pytorch:2.1.0-cuda11.8-mambaforge23.1.0-4-python3.10.12-fiji20231107-1617-firefox120.0-igv2.16.1-guacamole1.5.2-ubuntu22.04
+ARG REGISTRY_HOST
+FROM $REGISTRY_HOST/codeocean/ubuntu-desktop-pytorch:2.1.0-cuda11.8-mambaforge23.1.0-4-python3.10.12-fiji20231107-1617-firefox120.0-igv2.16.1-guacamole1.5.2-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG GIT_ASKPASS
