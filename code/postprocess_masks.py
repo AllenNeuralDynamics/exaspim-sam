@@ -133,6 +133,7 @@ def post_process_mask(
     input_path: str,
     output_path: str,
     dilation_kernel_size: int,
+    raw_intensity_percentile: float,
     raw_base_dir: str = None,
     median_dict: dict = None
 ):
@@ -155,7 +156,9 @@ def post_process_mask(
                         raw_vol = tifffile.imread(raw_path)
                         non_zero_mask = mask_vol & (raw_vol > 0)
                         if np.any(non_zero_mask):
-                            median_val = float(np.percentile(raw_vol[non_zero_mask], 75))
+                            median_val = float(
+                                np.percentile(raw_vol[non_zero_mask], raw_intensity_percentile)
+                            )
                             median_dict.setdefault(channel, []).append(median_val)
                     else:
                         print(f"  WARNING: Raw file for channel {channel} not found: {raw_path}")
@@ -202,6 +205,18 @@ if __name__ == "__main__":
         default="median_intensity_summary.json",
         help="Filename for saving the median intensity summary."
     )
+    parser.add_argument(
+        "--raw_intensity_percentile",
+        type=float,
+        default=75.0,
+        help="Percentile to compute from raw intensities inside each processed mask."
+    )
+    parser.add_argument(
+        "--summary_percentile",
+        type=float,
+        default=50.0,
+        help="Percentile to compute across per-tile intensity values in the JSON summary."
+    )
 
     args = parser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -229,6 +244,7 @@ if __name__ == "__main__":
                 input_file_path, 
                 output_file_path, 
                 args.kernel_size,
+                args.raw_intensity_percentile,
                 raw_base_dir=args.raw_base_dir,
                 median_dict=median_dict
             )
@@ -241,6 +257,7 @@ if __name__ == "__main__":
             args.input_path, 
             output_file_path, 
             args.kernel_size,
+            args.raw_intensity_percentile,
             raw_base_dir=args.raw_base_dir,
             median_dict=median_dict
         )
@@ -255,7 +272,7 @@ if __name__ == "__main__":
         if medians:
             summary[ch] = {
                 "tile_medians": medians,
-                "mean_of_medians": float(np.percentile(medians, 50))
+                "mean_of_medians": float(np.percentile(medians, args.summary_percentile))
             }
     
     if summary:

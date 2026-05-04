@@ -90,4 +90,6 @@ python3 "$SCRIPT_DIR/postprocess_masks.py" \
  --input_path "$PRED_SAVE_DIR" \
  --output_dir "$POSTPROCESSED_SAVE_DIR" \
  --raw_base_dir "/results/raw" \
- --kernel_size 3
+ --kernel_size 3 \
+ --raw_intensity_percentile 75 \
+ --summary_percentile 75
