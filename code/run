@@ -2,16 +2,14 @@
 set -euo pipefail
 set -x
 
-if [ "$#" -ne 4 ]; then
-  echo "Usage: $0 <S3_ZARR_PATH> <RES_488> <RES_561> <INFERENCE_CHANNEL>"
+if [ "$#" -ne 2 ]; then
+  echo "Usage: $0 <S3_ZARR_PATH> <INFERENCE_CHANNEL>"
   exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S3_ZARR_PATH="$1"
-RES_488="$2"
-RES_561="$3"
-INFERENCE_CHANNEL="$4"
+INFERENCE_CHANNEL="$2"
 RAW_SAVE_DIR="/results/raw"
 MASK_SAVE_DIR="/results/mask"
 PRED_SAVE_DIR="/results/pred"
@@ -25,6 +23,23 @@ case "$INFERENCE_CHANNEL" in
     exit 1
     ;;
 esac
+
+RES_488=""
+RES_561=""
+REFERENCE_TILE=""
+while IFS='=' read -r key value; do
+  case "$key" in
+    RES_488) RES_488="$value" ;;
+    RES_561) RES_561="$value" ;;
+    REFERENCE_TILE) REFERENCE_TILE="$value" ;;
+  esac
+done < <(python3 "$SCRIPT_DIR/infer_channel_resolutions.py" --zarr "$S3_ZARR_PATH")
+
+if [ -z "$RES_488" ] || [ -z "$RES_561" ]; then
+  echo "Error: failed to infer channel resolutions from '$S3_ZARR_PATH'"
+  exit 1
+fi
+echo "Inferred resolutions from ${REFERENCE_TILE}: RES_488=${RES_488}, RES_561=${RES_561}"
 
 PROCESS_START_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 

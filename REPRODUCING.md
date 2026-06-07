@@ -43,7 +43,7 @@ docker run --platform linux/amd64 --rm --gpus all \
   --env AWS_SECRET_ACCESS_KEY=value \
   --env AWS_DEFAULT_REGION=value \
   registry.codeocean.allenneuraldynamics.org/capsule/8732c547-1336-4261-a682-fd53c9f61786 \
-  bash run '' '' '' ''
+  bash run '<S3_ZARR_PATH>' '<INFERENCE_CHANNEL>'
 ```
 
 As secrets are required, replace all `value` occurances with your personal credentials prior to your run.
