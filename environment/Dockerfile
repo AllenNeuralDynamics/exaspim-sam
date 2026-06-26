@@ -1,6 +1,6 @@
-# hash:sha256:cf56d04151eea4da4c8a5879a369b6929889e2582e33c04c1ce36656d3c88b6f
+# hash:sha256:7df40a544a4460694136c81f3eb8bb46e66d38bf5567c06f676a34455e2f6902
 ARG REGISTRY_HOST
-FROM $REGISTRY_HOST/codeocean/ubuntu-desktop-pytorch:2.1.0-cuda11.8-mambaforge23.1.0-4-python3.10.12-fiji20231107-1617-firefox120.0-igv2.16.1-guacamole1.5.2-ubuntu22.04
+FROM $REGISTRY_HOST/codeocean/pytorch:2.4.0-cuda12.4.0-mambaforge24.5.0-0-python3.12.4-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG GIT_ASKPASS
@@ -11,12 +11,12 @@ RUN apt-get update \
         ffmpeg=7:4.4.2-0ubuntu0.22.04.1 \
     && rm -rf /var/lib/apt/lists/*
 
-ADD "https://github.com/coder/code-server/releases/download/v4.116.0/code-server-4.116.0-linux-amd64.tar.gz" /.code-server/code-server.tar.gz
+ADD "https://github.com/coder/code-server/releases/download/v4.100.3/code-server-4.100.3-linux-amd64.tar.gz" /.code-server/code-server.tar.gz
 
 RUN cd /.code-server \
     && tar -xvf code-server.tar.gz \
     && rm code-server.tar.gz \
-    && ln -s /.code-server/code-server-4.116.0-linux-amd64/bin/code-server /usr/bin/code-server \
+    && ln -s /.code-server/code-server-4.100.3-linux-amd64/bin/code-server /usr/bin/code-server \
     && mkdir -p /.vscode/extensions
 
 COPY postInstall /
