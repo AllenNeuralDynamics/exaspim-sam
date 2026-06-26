@@ -1,28 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-git clone https://github.com/bowang-lab/MedSAM.git && cd MedSAM
+pip install --no-cache-dir "monai==1.6.0"
+
+# Install MedSAM itself without dependencies.
+git clone https://github.com/bowang-lab/MedSAM.git
+cd MedSAM
 git checkout d71e8a1a99ad751840a22a7fa3ecfb4166fb1488
-pip install .
+pip install --no-cache-dir .
 cd ..
 
-pip install \
+pip install --upgrade torch torchvision torchaudio
+
+# Install the rest of your app/runtime dependencies.
+pip install --no-cache-dir \
     aind-data-schema==2.6.0 \
     aind-data-schema-models==5.4.5 \
-    gradio==3.38.0 \
-    numpy==1.26.3 \
+    gradio \
+    "numpy>=2" \
     ffmpeg-python==0.2.0 \
     moviepy==2.2.1 \
     dask==2026.3.0 \
     distributed==2026.3.0 \
-    zarr==2.18.3 \
+    zarr==3.2.1 \
+    crc32c \
     s3fs==2026.3.0 \
     boto3==1.42.91 \
-    matplotlib==3.10.9 \
     pandas==2.3.3 \
     tifffile==2025.5.10 \
-    scipy==1.15.3 \
-    scikit-image==0.25.2 \
-    dask-image==2025.11.0 \
-    jupyterlab==4.0.8 \
-    ipywidgets==8.1.1
+    dask-image==2025.11.0
+
+# Guard against accidental torch/torchvision mutation.
+python - <<'PY'
+import torch, torchvision
+print("torch:", torch.__version__)
+print("torchvision:", torchvision.__version__)
+from torchvision.ops import nms
+print("torchvision nms OK")
+PY

@@ -3,7 +3,7 @@ import dask.array as da
 import scipy.ndimage as nd
 from scipy.ndimage import distance_transform_edt
 from scipy.ndimage import binary_fill_holes, binary_closing
-from scipy.ndimage.measurements import label
+from scipy.ndimage import label
 from skimage.morphology import ball, disk
 
 from utils import resize_dask

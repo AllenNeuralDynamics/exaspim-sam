@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 import numpy as np
 import tifffile
 import zarr
@@ -38,8 +39,9 @@ def process_and_save_array(array_path: str, zarr_group, dataset_name, ch, res, r
     """Process a single array in the group."""
     print(f"\nProcessing {array_path} ...")
     arr_proxy = zarr_group[array_path][str(res)]
-    # Load with dask and squeeze to remove degenerate dims
-    arr = da.from_array(arr_proxy).astype(np.float32).squeeze()
+    # Load with dask (aligning blocks to the on-disk zarr/shard chunking) and
+    # squeeze to remove degenerate dims.
+    arr = da.from_zarr(arr_proxy).astype(np.float32).squeeze()
     arr = gaussian_filter_dask(arr, sigma=gaussian_sigma).compute()
     print(f"  Shape after blur: {arr.shape}, dtype: {arr.dtype}")
 
@@ -78,11 +80,13 @@ def main():
 
     client = Client(LocalCluster(processes=False))
 
-    # Discover arrays with matching channel and resolution
+    # Discover tile groups for the requested channel (matches both v2
+    # ``..._ch_488.zarr`` and v3 ``..._ch_488.ome.zarr`` naming).
+    tile_re = re.compile(rf"_ch_{re.escape(args.channel)}(?:\.ome)?\.zarr$")
     array_paths = []
     for tile_group in zarr_group.keys():
-        if args.channel in tile_group:
-            array_paths.append(f"{tile_group}")
+        if tile_re.search(tile_group):
+            array_paths.append(tile_group)
     if not array_paths:
         print("No arrays found matching your channel/resolution pattern.")
         return
