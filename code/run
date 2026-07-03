@@ -3,24 +3,46 @@ set -euo pipefail
 set -x
 
 if [ "$#" -ne 2 ]; then
-  echo "Usage: $0 <S3_ZARR_PATH> <INFERENCE_CHANNEL>"
+  echo "Usage: $0 <S3_ZARR_PATH|TILE_JSON_PATH> <INFERENCE_CHANNEL>"
   exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-S3_ZARR_PATH="$1"
+INPUT_PATH="$1"
 INFERENCE_CHANNEL="$2"
 RAW_SAVE_DIR="/results/raw"
 MASK_SAVE_DIR="/results/mask"
 PRED_SAVE_DIR="/results/pred"
 POSTPROCESSED_SAVE_DIR="/results/postprocessed"
 DATA_PROCESS_JSON="/results/data_process.json"
+S3_ZARR_PATH=""
+TILE_JSON_PATH=""
+RESOLUTION_SOURCE_ARGS=()
+PREPROCESS_SOURCE_ARGS=()
+DATA_PROCESS_SOURCE_ARGS=(--input-path "$INPUT_PATH")
 
 case "$INFERENCE_CHANNEL" in
   488|561) ;;
   *)
     echo "Error: INFERENCE_CHANNEL must be either 488 or 561, got '$INFERENCE_CHANNEL'"
     exit 1
+    ;;
+esac
+
+case "${INPUT_PATH,,}" in
+  *.json)
+    TILE_JSON_PATH="$INPUT_PATH"
+    RESOLUTION_SOURCE_ARGS=(--tile-json "$TILE_JSON_PATH")
+    PREPROCESS_SOURCE_ARGS=(--tile-json "$TILE_JSON_PATH")
+    DATA_PROCESS_SOURCE_ARGS+=(--tile-json-path "$TILE_JSON_PATH")
+    echo "Using tile JSON input: $TILE_JSON_PATH"
+    ;;
+  *)
+    S3_ZARR_PATH="$INPUT_PATH"
+    RESOLUTION_SOURCE_ARGS=(--zarr "$S3_ZARR_PATH")
+    PREPROCESS_SOURCE_ARGS=(--zarr "$S3_ZARR_PATH")
+    DATA_PROCESS_SOURCE_ARGS+=(--s3-zarr-path "$S3_ZARR_PATH")
+    echo "Using parent zarr input: $S3_ZARR_PATH"
     ;;
 esac
 
@@ -33,10 +55,10 @@ while IFS='=' read -r key value; do
     RES_561) RES_561="$value" ;;
     REFERENCE_TILE) REFERENCE_TILE="$value" ;;
   esac
-done < <(python3 "$SCRIPT_DIR/infer_channel_resolutions.py" --zarr "$S3_ZARR_PATH")
+done < <(python3 "$SCRIPT_DIR/infer_channel_resolutions.py" "${RESOLUTION_SOURCE_ARGS[@]}")
 
 if [ -z "$RES_488" ] || [ -z "$RES_561" ]; then
-  echo "Error: failed to infer channel resolutions from '$S3_ZARR_PATH'"
+  echo "Error: failed to infer channel resolutions from '$INPUT_PATH'"
   exit 1
 fi
 echo "Inferred resolutions from ${REFERENCE_TILE}: RES_488=${RES_488}, RES_561=${RES_561}"
@@ -56,7 +78,7 @@ write_data_process_metadata() {
   process_end_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   set +e
   python3 "$SCRIPT_DIR/generate_data_process.py" \
-    --s3-zarr-path "$S3_ZARR_PATH" \
+    "${DATA_PROCESS_SOURCE_ARGS[@]}" \
     --res-488 "$RES_488" \
     --res-561 "$RES_561" \
     --inference-channel "$INFERENCE_CHANNEL" \
@@ -81,14 +103,14 @@ mkdir -p "$PRED_SAVE_DIR" "$POSTPROCESSED_SAVE_DIR"
 
 # Step 1: Preprocess
 python3 "$SCRIPT_DIR/inference_preprocess.py" \
- --zarr "$S3_ZARR_PATH" \
+ "${PREPROCESS_SOURCE_ARGS[@]}" \
  --channel 488 \
  --res "$RES_488" \
  --raw-save-dir "$RAW_SAVE_DIR/488" \
  --mask-save-dir "$MASK_SAVE_DIR/488"
 
 python3 "$SCRIPT_DIR/inference_preprocess.py" \
- --zarr "$S3_ZARR_PATH" \
+ "${PREPROCESS_SOURCE_ARGS[@]}" \
  --channel 561 \
  --res "$RES_561" \
  --raw-save-dir "$RAW_SAVE_DIR/561" \

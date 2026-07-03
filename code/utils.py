@@ -1,4 +1,81 @@
+import json
+import re
+
 import numpy as np
+
+
+TILE_PATH_RE = re.compile(r"^(tile_\d+)_ch_(488|561)((?:\.ome)?\.zarr)$")
+
+
+def load_tile_paths(tile_json_path: str) -> list[str]:
+    try:
+        with open(tile_json_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as exc:
+        raise ValueError(f"Could not read tile JSON {tile_json_path}: {exc}") from exc
+
+    tile_paths = payload.get("tile_paths") if isinstance(payload, dict) else None
+    if not isinstance(tile_paths, list):
+        raise ValueError(
+            f"Tile JSON {tile_json_path} must contain a list field named tile_paths."
+        )
+
+    if not tile_paths:
+        raise ValueError(f"Tile JSON {tile_json_path} has no tile_paths entries.")
+
+    invalid = [path for path in tile_paths if not isinstance(path, str) or not path.strip()]
+    if invalid:
+        raise ValueError(
+            f"Tile JSON {tile_json_path} contains non-string or empty tile_paths entries."
+        )
+
+    return tile_paths
+
+
+def parse_tile_path(tile_path: str) -> tuple[str, str]:
+    basename = tile_path.rstrip("/").split("/")[-1]
+    match = TILE_PATH_RE.match(basename)
+    if not match:
+        raise ValueError(
+            f"Could not parse tile/channel from tile path '{tile_path}'. "
+            "Expected a basename like tile_000000_ch_488(.ome).zarr."
+        )
+
+    tile_name, channel, _suffix = match.groups()
+    return tile_name, channel
+
+
+def collect_tile_paths(tile_paths: list[str]) -> tuple[dict[str, dict[str, str]], list[str]]:
+    tile_children: dict[str, dict[str, str]] = {}
+    tile_order: list[str] = []
+
+    for tile_path in tile_paths:
+        tile_name, channel = parse_tile_path(tile_path)
+        channels = tile_children.setdefault(tile_name, {})
+        if not channels:
+            tile_order.append(tile_name)
+        if channel in channels:
+            raise ValueError(
+                f"Tile JSON contains duplicate paths for {tile_name} channel {channel}."
+            )
+        channels[channel] = tile_path
+
+    return tile_children, tile_order
+
+
+def safe_filename_component(value: str) -> str:
+    safe_value = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
+    return safe_value or "tile"
+
+
+def tile_output_prefix(tile_path: str) -> str:
+    parts = [part for part in tile_path.rstrip("/").split("/") if part]
+    tile_basename = parts[-1] if parts else "tile"
+    parent_name = parts[-2] if len(parts) >= 2 else "tile"
+    return (
+        f"{safe_filename_component(parent_name)}_"
+        f"{safe_filename_component(tile_basename)}"
+    )
 
 
 def resize_dask(image, scale_factor, order=1, output_chunks=(128, 256, 256)):

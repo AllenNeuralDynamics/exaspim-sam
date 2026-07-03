@@ -43,7 +43,13 @@ docker run --platform linux/amd64 --rm --gpus all \
   --env AWS_SECRET_ACCESS_KEY=value \
   --env AWS_DEFAULT_REGION=value \
   registry.codeocean.allenneuraldynamics.org/capsule/8732c547-1336-4261-a682-fd53c9f61786 \
-  bash run '<S3_ZARR_PATH>' '<INFERENCE_CHANNEL>'
+  bash run '<S3_ZARR_PATH|TILE_JSON_PATH>' '<INFERENCE_CHANNEL>'
+```
+
+The first argument can be either a parent zarr path or a JSON file containing a `tile_paths` list. For example:
+```shell
+bash run '<S3_ZARR_PATH>' '<INFERENCE_CHANNEL>'
+bash run /data/tile_000006.json 561
 ```
 
 As secrets are required, replace all `value` occurances with your personal credentials prior to your run.

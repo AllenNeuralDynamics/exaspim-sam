@@ -12,6 +12,7 @@ from typing import Any
 
 from aind_data_schema.core.processing import Code, DataProcess, ProcessStage
 from aind_data_schema_models.process_names import ProcessName
+from utils import load_tile_paths
 
 
 REPO_URL = "https://github.com/AllenNeuralDynamics/exaspim-sam"
@@ -24,7 +25,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate /results/data_process.json for whole brain masking."
     )
-    parser.add_argument("--s3-zarr-path", required=True)
+    parser.add_argument("--input-path")
+    parser.add_argument("--s3-zarr-path")
+    parser.add_argument("--tile-json-path")
     parser.add_argument("--res-488", required=True, type=int)
     parser.add_argument("--res-561", required=True, type=int)
     parser.add_argument("--inference-channel", required=True, choices=["488", "561"])
@@ -37,7 +40,17 @@ def parse_args() -> argparse.Namespace:
         "--metadata-yml",
         default=str(Path(__file__).resolve().parents[1] / "metadata" / "metadata.yml"),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if not (args.input_path or args.s3_zarr_path or args.tile_json_path):
+        parser.error(
+            "one of --input-path, --s3-zarr-path, or --tile-json-path is required"
+        )
+
+    if args.input_path is None:
+        args.input_path = args.tile_json_path or args.s3_zarr_path
+
+    return args
 
 
 def parse_datetime(value: str) -> datetime:
@@ -106,9 +119,19 @@ def get_experimenters(metadata_path: Path) -> list[str]:
     return experimenters or [DEFAULT_EXPERIMENTER]
 
 
+def count_tile_paths(tile_json_path: str | None) -> int | None:
+    if not tile_json_path:
+        return None
+
+    try:
+        return len(load_tile_paths(tile_json_path))
+    except ValueError:
+        return None
+
+
 def build_parameters(args: argparse.Namespace) -> dict[str, Any]:
-    return {
-        "s3_zarr_path": args.s3_zarr_path,
+    parameters: dict[str, Any] = {
+        "input_path": args.input_path,
         "res_488": args.res_488,
         "res_561": args.res_561,
         "inference_channel": args.inference_channel,
@@ -138,6 +161,17 @@ def build_parameters(args: argparse.Namespace) -> dict[str, Any]:
             "kernel_size": 3,
         },
     }
+
+    if args.s3_zarr_path:
+        parameters["s3_zarr_path"] = args.s3_zarr_path
+
+    if args.tile_json_path:
+        parameters["tile_json_path"] = args.tile_json_path
+        selected_tile_count = count_tile_paths(args.tile_json_path)
+        if selected_tile_count is not None:
+            parameters["selected_tile_count"] = selected_tile_count
+
+    return parameters
 
 
 def write_data_process(args: argparse.Namespace) -> Path:
