@@ -108,6 +108,7 @@ trap write_data_process_metadata EXIT
 
 rm -rf "$PRED_SAVE_DIR" "$POSTPROCESSED_SAVE_DIR"
 mkdir -p "$PRED_SAVE_DIR" "$POSTPROCESSED_SAVE_DIR"
+touch "${POSTPROCESSED_SAVE_DIR}/${REFERENCE_TILE}_ch_${INFERENCE_CHANNEL}.txt"
 
 # Step 1: Preprocess
 python3 "$SCRIPT_DIR/inference_preprocess.py" \
