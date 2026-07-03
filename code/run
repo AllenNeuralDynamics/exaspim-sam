@@ -14,7 +14,7 @@ RAW_SAVE_DIR="/results/raw"
 MASK_SAVE_DIR="/results/mask"
 PRED_SAVE_DIR="/results/pred"
 POSTPROCESSED_SAVE_DIR="/results/postprocessed"
-DATA_PROCESS_JSON="/results/data_process.json"
+DATA_PROCESS_JSON=""
 S3_ZARR_PATH=""
 TILE_JSON_PATH=""
 RESOLUTION_SOURCE_ARGS=()
@@ -61,7 +61,15 @@ if [ -z "$RES_488" ] || [ -z "$RES_561" ]; then
   echo "Error: failed to infer channel resolutions from '$INPUT_PATH'"
   exit 1
 fi
+
+if [ -z "$REFERENCE_TILE" ]; then
+  echo "Error: failed to infer reference tile from '$INPUT_PATH'"
+  exit 1
+fi
+
+DATA_PROCESS_JSON="/results/mask_data_process_${REFERENCE_TILE}_ch_${INFERENCE_CHANNEL}.json"
 echo "Inferred resolutions from ${REFERENCE_TILE}: RES_488=${RES_488}, RES_561=${RES_561}"
+echo "DataProcess metadata will be written to ${DATA_PROCESS_JSON}"
 
 PROCESS_START_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
