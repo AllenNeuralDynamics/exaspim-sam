@@ -5,15 +5,13 @@ from __future__ import annotations
 
 import argparse
 import math
-import re
 import sys
 
 import zarr
-from utils import collect_tile_paths, load_tile_paths
+from utils import TILE_PATH_RE, collect_tile_paths, load_tile_paths
 
 
 CHANNELS = ("488", "561")
-TILE_GROUP_RE = re.compile(r"^(tile_\d+)_ch_(488|561)((?:\.ome)?\.zarr)$")
 LARGER_CHANNEL_RES = 4
 SMALLER_CHANNEL_RES = 1
 
@@ -46,7 +44,7 @@ def collect_tile_children(zarr_group: zarr.Group) -> dict[str, dict[str, str]]:
     tile_children: dict[str, dict[str, str]] = {}
 
     for group_name in zarr_group.keys():
-        match = TILE_GROUP_RE.match(group_name)
+        match = TILE_PATH_RE.match(group_name)
         if not match:
             continue
 
@@ -121,7 +119,9 @@ def infer_resolutions(zarr_path: str) -> tuple[int, int, str]:
     if not tiles:
         raise RuntimeError(
             "No paired tile groups found. Expected parent group entries like "
-            "tile_000000_ch_488(.ome).zarr and tile_000000_ch_561(.ome).zarr."
+            "tile_000000_ch_488(.ome).zarr and tile_000000_ch_561(.ome).zarr, "
+            "or the grid form tile_x_0000_y_0000_z_0000_ch_488(.ome).zarr and "
+            "tile_x_0000_y_0000_z_0000_ch_561(.ome).zarr."
         )
 
     reference_tile = tiles[0]
@@ -137,8 +137,9 @@ def infer_resolutions_from_tile_json(tile_json_path: str) -> tuple[int, int, str
     if not tiles:
         raise RuntimeError(
             f"No paired tile_paths found in {tile_json_path}. Expected entries for "
-            "both tile_000000_ch_488(.ome).zarr and "
-            "tile_000000_ch_561(.ome).zarr for at least one tile."
+            "both channels of at least one tile, e.g. tile_000000_ch_488(.ome).zarr "
+            "and tile_000000_ch_561(.ome).zarr, or the grid form "
+            "tile_x_0000_y_0000_z_0000_ch_488(.ome).zarr and its ch_561 counterpart."
         )
 
     reference_tile = tiles[0]

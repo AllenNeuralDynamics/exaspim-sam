@@ -13,12 +13,10 @@ from estimate_background import background_estimation
 from utils import load_tile_paths, parse_tile_path, tile_output_prefix
 import argparse
 
-DEFAULT_ZARR_PATH = 's3://aind-open-data/exaSPIM_754615_2025-01-23_16-44-53/SPIM.ome.zarr'
-
 # -------- CONFIG ---------
 def parse_args():
     parser = argparse.ArgumentParser(description="Preprocess zarr arrays for inference.")
-    parser.add_argument('--zarr', type=str, default=DEFAULT_ZARR_PATH, help='Path to the parent zarr group.')
+    parser.add_argument('--zarr', type=str, help='Path to the parent zarr group.')
     parser.add_argument('--tile-json', type=str, help='JSON file containing a tile_paths list of tile zarr paths. If set, only those tile paths are processed.')
     parser.add_argument('--channel', type=str, default='488', help='Channel to process.')
     parser.add_argument('--res', type=int, default=4, help='Resolution level (integer, 0=highest).')
