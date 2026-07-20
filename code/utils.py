@@ -4,7 +4,13 @@ import re
 import numpy as np
 
 
-TILE_PATH_RE = re.compile(r"^(tile_\d+)_ch_(488|561)((?:\.ome)?\.zarr)$")
+# Tile basenames come in two exaSPIM schemes: a flat index (``tile_000000``) and
+# a grid-coordinate form (``tile_x_0000_y_0000_z_0000``). Keep this token as the
+# single source of truth; it is reused for the anchored basename match below and
+# for searching the token inside longer output filenames.
+TILE_NAME = r"tile_(?:x_\d+_y_\d+_z_\d+|\d+)"
+TILE_PATH_RE = re.compile(rf"^({TILE_NAME})_ch_(488|561)((?:\.ome)?\.zarr)$")
+TILE_NAME_SEARCH_RE = re.compile(rf"({TILE_NAME})")
 
 
 def load_tile_paths(tile_json_path: str) -> list[str]:
@@ -38,7 +44,8 @@ def parse_tile_path(tile_path: str) -> tuple[str, str]:
     if not match:
         raise ValueError(
             f"Could not parse tile/channel from tile path '{tile_path}'. "
-            "Expected a basename like tile_000000_ch_488(.ome).zarr."
+            "Expected a basename like tile_000000_ch_488(.ome).zarr or "
+            "tile_x_0000_y_0000_z_0000_ch_488(.ome).zarr."
         )
 
     tile_name, channel, _suffix = match.groups()

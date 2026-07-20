@@ -8,11 +8,13 @@ from tqdm import tqdm
 import json
 import re
 
+from utils import TILE_NAME_SEARCH_RE
+
 STAT_CHANNELS = ("488", "561")
 
 
 def detect_tile_name_from_filename(filename: str) -> str | None:
-    match = re.search(r"(tile_\d+)", filename)
+    match = TILE_NAME_SEARCH_RE.search(filename)
     return match.group(1) if match else None
 
 
