@@ -11,6 +11,32 @@ import re
 STAT_CHANNELS = ("488", "561")
 
 
+def detect_tile_name_from_filename(filename: str) -> str | None:
+    match = re.search(r"(tile_\d+)", filename)
+    return match.group(1) if match else None
+
+
+def build_summary_json_filename(save_json: str, input_files: list[str]) -> str:
+    tile_names = sorted(
+        {
+            tile_name
+            for filename in input_files
+            if (tile_name := detect_tile_name_from_filename(filename)) is not None
+        }
+    )
+    if len(tile_names) == 1 and not save_json.startswith(f"{tile_names[0]}_"):
+        return f"{tile_names[0]}_{save_json}"
+
+    return save_json
+
+
+def summarize_medians(medians: list[float], summary_percentile: float) -> float:
+    if len(medians) == 1:
+        return float(medians[0])
+
+    return float(np.percentile(medians, summary_percentile))
+
+
 def detect_channel_from_filename(filename: str) -> str:
     match = re.search(r"_ch_(488|561)(?=(_|\.))", filename)
     if not match:
@@ -222,6 +248,7 @@ if __name__ == "__main__":
     os.makedirs(args.output_dir, exist_ok=True)
 
     median_dict = {}
+    processed_input_files = []
 
     if os.path.isdir(args.input_path):
         print(f"Processing all TIFF files in directory: {args.input_path}")
@@ -239,6 +266,7 @@ if __name__ == "__main__":
         for filename in tqdm(input_files, desc="Processing masks"):
             input_file_path = os.path.join(args.input_path, filename)
             output_file_path = os.path.join(args.output_dir, filename)
+            processed_input_files.append(filename)
             
             post_process_mask(
                 input_file_path, 
@@ -251,7 +279,9 @@ if __name__ == "__main__":
 
     elif os.path.isfile(args.input_path):
         print(f"Processing single file: {args.input_path}")
-        output_file_path = os.path.join(args.output_dir, os.path.basename(args.input_path))
+        input_filename = os.path.basename(args.input_path)
+        output_file_path = os.path.join(args.output_dir, input_filename)
+        processed_input_files.append(input_filename)
 
         post_process_mask(
             args.input_path, 
@@ -272,11 +302,12 @@ if __name__ == "__main__":
         if medians:
             summary[ch] = {
                 "tile_medians": medians,
-                "mean_of_medians": float(np.percentile(medians, args.summary_percentile))
+                "mean_of_medians": summarize_medians(medians, args.summary_percentile)
             }
     
     if summary:
-        json_path = os.path.join(args.output_dir, args.save_json)
+        save_json = build_summary_json_filename(args.save_json, processed_input_files)
+        json_path = os.path.join(args.output_dir, save_json)
         with open(json_path, "w") as f:
             json.dump(summary, f, indent=4)
         print(f"\nMedian intensity summary saved to: {json_path}")
