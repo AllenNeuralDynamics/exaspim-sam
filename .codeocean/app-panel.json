@@ -23,13 +23,19 @@
 		},
 		{
 			"id": "A6qiJOPoePPl82vo",
-			"name": "threshold-percentile",
+			"name": "fixed-threshold",
 			"type": "text",
 			"value_type": "string"
 		},
 		{
 			"id": "vJealPwxNKGSDo4Z",
-			"name": "threshold-value",
+			"name": "threshold-percentile",
+			"type": "text",
+			"value_type": "string"
+		},
+		{
+			"id": "Kd7pRx92mLqTvBnW",
+			"name": "bbox-prompt-type",
 			"type": "text",
 			"value_type": "string"
 		}

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<EOF
-Usage: $0 <S3_ZARR_PATH|TILE_JSON_PATH> <INFERENCE_CHANNEL> [THRESHOLD_METHOD] [FIXED_THRESHOLD] [PERCENTILE]
+Usage: $0 <S3_ZARR_PATH|TILE_JSON_PATH> <INFERENCE_CHANNEL> [THRESHOLD_METHOD] [FIXED_THRESHOLD] [PERCENTILE] [BBOX_PROMPT_TYPE]
 
 Positional arguments:
   S3_ZARR_PATH|TILE_JSON_PATH  Input parent zarr path or tile JSON file.
@@ -14,10 +14,11 @@ Positional arguments:
   THRESHOLD_METHOD             Thresholding method: fixed or percentile (default: fixed).
   FIXED_THRESHOLD              Fixed threshold value when method is 'fixed' (default: 1).
   PERCENTILE                   Percentile in [0, 100] when method is 'percentile', 50 = median (default: 50).
+  BBOX_PROMPT_TYPE             MedSAM bbox prompt: mask or whole (default: mask).
 EOF
 }
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
+if [ "$#" -lt 2 ] || [ "$#" -gt 6 ]; then
   usage
   exit 1
 fi
@@ -28,11 +29,21 @@ INFERENCE_CHANNEL="$2"
 THRESHOLD_METHOD="${3:-fixed}"
 FIXED_THRESHOLD="${4:-1}"
 THRESHOLD_PERCENTILE="${5:-50}"
+# Inference config (optional positional arg with default).
+BBOX_PROMPT_TYPE="${6:-mask}"
 
 case "$THRESHOLD_METHOD" in
   fixed|percentile) ;;
   *)
     echo "Error: THRESHOLD_METHOD must be either 'fixed' or 'percentile', got '$THRESHOLD_METHOD'"
+    exit 1
+    ;;
+esac
+
+case "$BBOX_PROMPT_TYPE" in
+  mask|whole) ;;
+  *)
+    echo "Error: BBOX_PROMPT_TYPE must be either 'mask' or 'whole', got '$BBOX_PROMPT_TYPE'"
     exit 1
     ;;
 esac
@@ -119,6 +130,7 @@ write_data_process_metadata() {
     --threshold-method "$THRESHOLD_METHOD" \
     --fixed-threshold "$FIXED_THRESHOLD" \
     --percentile "$THRESHOLD_PERCENTILE" \
+    --bbox-prompt-type "$BBOX_PROMPT_TYPE" \
     --start-date-time "$PROCESS_START_TIME" \
     --end-date-time "$process_end_time" \
     --run-status "$run_status" \
@@ -164,7 +176,8 @@ python3 "$SCRIPT_DIR/inference_preprocess.py" \
 python3 "$SCRIPT_DIR/inference.py" \
  --raw_tiff_path "${RAW_SAVE_DIR}/${INFERENCE_CHANNEL}" \
  --mask_tiff_path "${MASK_SAVE_DIR}/${INFERENCE_CHANNEL}" \
- --pred_save_dir "$PRED_SAVE_DIR"
+ --pred_save_dir "$PRED_SAVE_DIR" \
+ --bbox_prompt_type "$BBOX_PROMPT_TYPE"
 
 # Step 3: Postprocess
 python3 "$SCRIPT_DIR/postprocess_masks.py" \
