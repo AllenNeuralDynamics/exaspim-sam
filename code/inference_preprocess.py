@@ -23,15 +23,16 @@ def parse_args():
     parser.add_argument('--raw-save-dir', type=str, default='/results/raw', help='Directory to save raw output.')
     parser.add_argument('--mask-save-dir', type=str, default='/results/mask', help='Directory to save mask output.')
     parser.add_argument('--gaussian-sigma', type=float, default=2, help='Sigma for Gaussian blur.')
-    parser.add_argument('--threshold-method', type=str, default='fixed', choices=['median', 'fixed'], help='Thresholding method.')
+    parser.add_argument('--threshold-method', type=str, default='fixed', choices=['percentile', 'fixed'], help='Thresholding method.')
     parser.add_argument('--fixed-threshold', type=float, default=1, help='Fixed threshold value (if method is fixed).')
+    parser.add_argument('--percentile', type=float, default=50.0, help='Percentile in [0, 100] used when threshold method is "percentile" (50 = median).')
     return parser.parse_args()
 
-def infer_threshold(data: np.ndarray, method: str = "median", fixed_value=None) -> float:
+def infer_threshold(data: np.ndarray, method: str = "fixed", fixed_value=None, percentile: float = 50.0) -> float:
     """Determine threshold value."""
     # data = data[data > 0]
-    if method == "median":
-        return float(np.median(data))
+    if method == "percentile":
+        return float(np.percentile(data, percentile))
     elif method == "fixed" and fixed_value is not None:
         return float(fixed_value)
     else:
@@ -97,7 +98,7 @@ def discover_tile_json_arrays(args):
     return array_specs
 
 
-def process_and_save_array(array_path: str, arr_proxy, output_prefix, raw_save_dir, mask_save_dir, gaussian_sigma, threshold_method, fixed_threshold):
+def process_and_save_array(array_path: str, arr_proxy, output_prefix, raw_save_dir, mask_save_dir, gaussian_sigma, threshold_method, fixed_threshold, percentile):
     """Process a single array in the group."""
     print(f"\nProcessing {array_path} ...")
     # Load with dask (aligning blocks to the on-disk zarr/shard chunking) and
@@ -114,7 +115,7 @@ def process_and_save_array(array_path: str, arr_proxy, output_prefix, raw_save_d
     print(f"  Background corrected. Value range: {arr_corrected.min()} - {arr_corrected.max()}")
 
     # Threshold
-    threshold = infer_threshold(arr_corrected, threshold_method, fixed_threshold)
+    threshold = infer_threshold(arr_corrected, threshold_method, fixed_threshold, percentile)
     print(f"  Threshold for mask: {threshold}")
 
     # Masking
@@ -156,7 +157,7 @@ def main():
             process_and_save_array(
                 array_path, arr_proxy, output_prefix, args.raw_save_dir,
                 args.mask_save_dir, args.gaussian_sigma, args.threshold_method,
-                args.fixed_threshold
+                args.fixed_threshold, args.percentile
             )
             processed += 1
         except Exception:

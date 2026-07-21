@@ -142,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_torch_compile", action="store_true", default=True, help="Use torch.compile to optimize model")
     parser.add_argument(
         "--bbox_prompt_type",
-        default="whole",
+        default="mask",
         choices=["mask", "whole"],
         help="Choose how to set the bounding box prompt: 'mask' uses the mask bbox, 'whole' uses the whole slice."
     )
