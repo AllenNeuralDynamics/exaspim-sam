@@ -31,6 +31,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--res-488", required=True, type=int)
     parser.add_argument("--res-561", required=True, type=int)
     parser.add_argument("--inference-channel", required=True, choices=["488", "561"])
+    parser.add_argument("--threshold-method", default="fixed", choices=["percentile", "fixed"])
+    parser.add_argument("--fixed-threshold", type=float, default=1)
+    parser.add_argument("--percentile", type=float, default=50.0)
     parser.add_argument("--start-date-time", required=True)
     parser.add_argument("--end-date-time", required=True)
     parser.add_argument("--run-status", required=True, choices=["success", "failed"])
@@ -142,8 +145,9 @@ def build_parameters(args: argparse.Namespace) -> dict[str, Any]:
         "preprocess": {
             "channels": ["488", "561"],
             "gaussian_sigma": 2,
-            "threshold_method": "fixed",
-            "fixed_threshold": 1,
+            "threshold_method": args.threshold_method,
+            "fixed_threshold": args.fixed_threshold,
+            "percentile": args.percentile,
         },
         "inference": {
             "medsam_checkpoint": "/data/medsam_best.pth",

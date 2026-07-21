@@ -2,14 +2,40 @@
 set -euo pipefail
 set -x
 
-if [ "$#" -ne 2 ]; then
-  echo "Usage: $0 <S3_ZARR_PATH|TILE_JSON_PATH> <INFERENCE_CHANNEL>"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  cat <<EOF
+Usage: $0 <S3_ZARR_PATH|TILE_JSON_PATH> <INFERENCE_CHANNEL> [THRESHOLD_METHOD] [FIXED_THRESHOLD] [PERCENTILE]
+
+Positional arguments:
+  S3_ZARR_PATH|TILE_JSON_PATH  Input parent zarr path or tile JSON file.
+  INFERENCE_CHANNEL            Inference channel: 488 or 561.
+  THRESHOLD_METHOD             Thresholding method: fixed or percentile (default: fixed).
+  FIXED_THRESHOLD              Fixed threshold value when method is 'fixed' (default: 1).
+  PERCENTILE                   Percentile in [0, 100] when method is 'percentile', 50 = median (default: 50).
+EOF
+}
+
+if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
+  usage
   exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INPUT_PATH="$1"
 INFERENCE_CHANNEL="$2"
+# Thresholding config (optional positional args with defaults).
+THRESHOLD_METHOD="${3:-fixed}"
+FIXED_THRESHOLD="${4:-1}"
+THRESHOLD_PERCENTILE="${5:-50}"
+
+case "$THRESHOLD_METHOD" in
+  fixed|percentile) ;;
+  *)
+    echo "Error: THRESHOLD_METHOD must be either 'fixed' or 'percentile', got '$THRESHOLD_METHOD'"
+    exit 1
+    ;;
+esac
 RAW_SAVE_DIR="/results/raw"
 MASK_SAVE_DIR="/results/mask"
 PRED_SAVE_DIR="/results/pred"
@@ -90,6 +116,9 @@ write_data_process_metadata() {
     --res-488 "$RES_488" \
     --res-561 "$RES_561" \
     --inference-channel "$INFERENCE_CHANNEL" \
+    --threshold-method "$THRESHOLD_METHOD" \
+    --fixed-threshold "$FIXED_THRESHOLD" \
+    --percentile "$THRESHOLD_PERCENTILE" \
     --start-date-time "$PROCESS_START_TIME" \
     --end-date-time "$process_end_time" \
     --run-status "$run_status" \
@@ -116,14 +145,20 @@ python3 "$SCRIPT_DIR/inference_preprocess.py" \
  --channel 488 \
  --res "$RES_488" \
  --raw-save-dir "$RAW_SAVE_DIR/488" \
- --mask-save-dir "$MASK_SAVE_DIR/488"
+ --mask-save-dir "$MASK_SAVE_DIR/488" \
+ --threshold-method "$THRESHOLD_METHOD" \
+ --fixed-threshold "$FIXED_THRESHOLD" \
+ --percentile "$THRESHOLD_PERCENTILE"
 
 python3 "$SCRIPT_DIR/inference_preprocess.py" \
  "${PREPROCESS_SOURCE_ARGS[@]}" \
  --channel 561 \
  --res "$RES_561" \
  --raw-save-dir "$RAW_SAVE_DIR/561" \
- --mask-save-dir "$MASK_SAVE_DIR/561"
+ --mask-save-dir "$MASK_SAVE_DIR/561" \
+ --threshold-method "$THRESHOLD_METHOD" \
+ --fixed-threshold "$FIXED_THRESHOLD" \
+ --percentile "$THRESHOLD_PERCENTILE"
 
 # Step 2: Inference
 python3 "$SCRIPT_DIR/inference.py" \
