@@ -8,7 +8,7 @@ from tqdm import tqdm
 import json
 import re
 
-from utils import TILE_NAME_SEARCH_RE
+from utils import TILE_NAME_SEARCH_RE, resample_mask_to_grid
 
 STAT_CHANNELS = ("488", "561")
 
@@ -70,6 +70,60 @@ def get_raw_paths_from_pred(pred_path: str, raw_base_dir: str) -> dict:
         )
         for channel in STAT_CHANNELS
     }
+
+
+def get_grid_paths_from_pred(pred_path: str, raw_base_dir: str) -> dict:
+    """Paths of the grid JSON that inference_preprocess writes beside each raw file."""
+    return {
+        channel: raw_path[: -len("_data.tif")] + "_grid.json"
+        for channel, raw_path in get_raw_paths_from_pred(pred_path, raw_base_dir).items()
+        if raw_path.endswith("_data.tif")
+    }
+
+
+def load_grid(grid_path: str, expected_shape: tuple[int, ...]) -> dict:
+    if not os.path.exists(grid_path):
+        raise FileNotFoundError(
+            f"Grid file {grid_path} is missing. It is needed to place the mask on "
+            "a channel whose volume has a different shape."
+        )
+    with open(grid_path, "r", encoding="utf-8") as f:
+        grid = json.load(f)
+    if tuple(grid["shape"]) != tuple(expected_shape):
+        raise ValueError(
+            f"Grid file {grid_path} describes shape {tuple(grid['shape'])}, "
+            f"but the volume has shape {tuple(expected_shape)}."
+        )
+    return grid
+
+
+def mask_on_channel_grid(
+    mask_vol: np.ndarray,
+    raw_shape: tuple[int, ...],
+    pred_path: str,
+    channel: str,
+    raw_base_dir: str,
+) -> np.ndarray:
+    """The inference channel's mask on the voxels of ``channel``'s raw volume.
+
+    The channels share a grid unless they were sampled differently: for example,
+    561 acquired at an 8 um z step and 488 at 2 um have the same YX but a quarter
+    of the z slices. The mask is then mapped by physical position, using the
+    grids that inference_preprocess recorded.
+    """
+    raw_shape = tuple(raw_shape)
+    if mask_vol.shape == raw_shape:
+        return mask_vol
+
+    source_channel = detect_channel_from_filename(os.path.basename(pred_path))
+    grid_paths = get_grid_paths_from_pred(pred_path, raw_base_dir)
+    source_grid = load_grid(grid_paths[source_channel], mask_vol.shape)
+    target_grid = load_grid(grid_paths[channel], raw_shape)
+    print(
+        f"  Mapping the {source_channel} mask {mask_vol.shape} onto the "
+        f"{channel} volume {raw_shape} by physical position"
+    )
+    return resample_mask_to_grid(mask_vol, source_grid, raw_shape, target_grid)
 
 
 def border_protected_closing(mask: np.ndarray, radius: int = 2) -> np.ndarray:
@@ -172,7 +226,13 @@ def post_process_mask(
     try:
         # 1. Load the 3D prediction mask
         mask_vol = tifffile.imread(input_path).astype(bool)
-        mask_vol = size_filter(mask_vol, min_size=10000, k_largest=2)
+        try:
+            mask_vol = size_filter(mask_vol, min_size=10000, k_largest=2)
+        except ValueError as e:
+            # No tissue object in this tile. Write no mask, as before: the
+            # correction step then only background-subtracts the tile.
+            print(f"  No mask written for {os.path.basename(input_path)}: {e}")
+            return True
 
         # 2. Median intensity calculation using the original, non-dilated mask
         if raw_base_dir and median_dict is not None:
@@ -182,7 +242,10 @@ def post_process_mask(
                 for channel, raw_path in raw_paths.items():
                     if os.path.exists(raw_path):
                         raw_vol = tifffile.imread(raw_path)
-                        non_zero_mask = mask_vol & (raw_vol > 0)
+                        channel_mask = mask_on_channel_grid(
+                            mask_vol, raw_vol.shape, input_path, channel, raw_base_dir
+                        )
+                        non_zero_mask = channel_mask & (raw_vol > 0)
                         if np.any(non_zero_mask):
                             median_val = float(
                                 np.percentile(raw_vol[non_zero_mask], raw_intensity_percentile)
@@ -197,9 +260,11 @@ def post_process_mask(
 
         # 4. Save the processed mask
         tifffile.imwrite(output_path, mask_vol.astype(np.uint8), compression='zlib', imagej=True)
+        return True
 
     except Exception as e:
         print(f"  ERROR: Failed to process {os.path.basename(input_path)}: {e}")
+        return False
 
 
 if __name__ == "__main__":
@@ -251,6 +316,7 @@ if __name__ == "__main__":
 
     median_dict = {}
     processed_input_files = []
+    failed_input_files = []
 
     if os.path.isdir(args.input_path):
         print(f"Processing all TIFF files in directory: {args.input_path}")
@@ -258,10 +324,12 @@ if __name__ == "__main__":
             f for f in os.listdir(args.input_path)
             if f.lower().endswith(('.tif', '.tiff'))
         ]
-        
+
         if not input_files:
-            print("No TIFF files found in the input directory. Exiting.")
-            exit()
+            # No prediction means no mask: the correction step would skip the
+            # tile's flatfield correction without saying so.
+            print("ERROR: No TIFF files found in the input directory.")
+            exit(1)
             
         print(f"Found {len(input_files)} files to process.")
         
@@ -269,15 +337,16 @@ if __name__ == "__main__":
             input_file_path = os.path.join(args.input_path, filename)
             output_file_path = os.path.join(args.output_dir, filename)
             processed_input_files.append(filename)
-            
-            post_process_mask(
-                input_file_path, 
-                output_file_path, 
+
+            if not post_process_mask(
+                input_file_path,
+                output_file_path,
                 args.kernel_size,
                 args.raw_intensity_percentile,
                 raw_base_dir=args.raw_base_dir,
                 median_dict=median_dict
-            )
+            ):
+                failed_input_files.append(filename)
 
     elif os.path.isfile(args.input_path):
         print(f"Processing single file: {args.input_path}")
@@ -285,14 +354,15 @@ if __name__ == "__main__":
         output_file_path = os.path.join(args.output_dir, input_filename)
         processed_input_files.append(input_filename)
 
-        post_process_mask(
-            args.input_path, 
-            output_file_path, 
+        if not post_process_mask(
+            args.input_path,
+            output_file_path,
             args.kernel_size,
             args.raw_intensity_percentile,
             raw_base_dir=args.raw_base_dir,
             median_dict=median_dict
-        )
+        ):
+            failed_input_files.append(input_filename)
 
     else:
         print(f"Error: Input path '{args.input_path}' is not a valid file or directory.")
@@ -318,3 +388,10 @@ if __name__ == "__main__":
 
     print("\nProcessing complete.")
     print(f"Processed masks are saved in: {args.output_dir}")
+
+    if failed_input_files:
+        print(
+            f"ERROR: {len(failed_input_files)} mask(s) failed to postprocess: "
+            + ", ".join(sorted(failed_input_files))
+        )
+        exit(1)
