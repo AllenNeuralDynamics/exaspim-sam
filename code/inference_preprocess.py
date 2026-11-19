@@ -1,6 +1,8 @@
 import os
+import json
 import logging
 import re
+import sys
 import numpy as np
 import tifffile
 import zarr
@@ -10,7 +12,7 @@ from dask_image.ndfilters import gaussian_filter as gaussian_filter_dask
 from pathlib import Path
 from masking import get_mask
 from estimate_background import background_estimation
-from utils import load_tile_paths, parse_tile_path, tile_output_prefix
+from utils import load_tile_paths, parse_tile_path, read_level_grid, tile_output_prefix
 import argparse
 
 # -------- CONFIG ---------
@@ -39,6 +41,19 @@ def infer_threshold(data: np.ndarray, method: str = "fixed", fixed_value=None, p
         raise ValueError(f"Unknown threshold method: {method}")
 
 
+def level_grid_or_none(tile_group, level, tile_name):
+    """The level's ZYX scale and translation, or None when the metadata lacks them.
+
+    postprocess_masks needs the grids only when the two channels' arrays differ
+    in shape, and fails there if they are missing.
+    """
+    try:
+        return read_level_grid(tile_group, level)
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"  WARNING: no OME grid for level {level} of {tile_name}: {exc}")
+        return None
+
+
 def discover_parent_zarr_arrays(args):
     print(f"Opening zarr group: {args.zarr}")
     zarr_group = zarr.open_group(args.zarr, mode='r')
@@ -55,6 +70,7 @@ def discover_parent_zarr_arrays(args):
                     tile_group,
                     zarr_group[tile_group][str(args.res)],
                     f"{dataset_name}_{tile_group}",
+                    level_grid_or_none(zarr_group[tile_group], args.res, tile_group),
                 )
             )
     if not array_specs:
@@ -87,6 +103,7 @@ def discover_tile_json_arrays(args):
                 tile_path,
                 arr_proxy,
                 tile_output_prefix(tile_path),
+                level_grid_or_none(tile_group, args.res, tile_path),
             )
         )
 
@@ -98,7 +115,7 @@ def discover_tile_json_arrays(args):
     return array_specs
 
 
-def process_and_save_array(array_path: str, arr_proxy, output_prefix, raw_save_dir, mask_save_dir, gaussian_sigma, threshold_method, fixed_threshold, percentile):
+def process_and_save_array(array_path: str, arr_proxy, output_prefix, raw_save_dir, mask_save_dir, gaussian_sigma, threshold_method, fixed_threshold, percentile, grid=None):
     """Process a single array in the group."""
     print(f"\nProcessing {array_path} ...")
     # Load with dask (aligning blocks to the on-disk zarr/shard chunking) and
@@ -131,6 +148,15 @@ def process_and_save_array(array_path: str, arr_proxy, output_prefix, raw_save_d
     tifffile.imwrite(mask_out, mask.astype(np.uint8), imagej=True, compression='zlib')
     print(f"  Saved raw: {raw_out}\n  Saved mask: {mask_out}")
 
+    # Record where the raw volume sits in physical space. postprocess_masks needs
+    # it when the two channels are sampled differently (e.g. a coarser 561 z step)
+    # to place the inference channel's mask on the other channel's voxels.
+    if grid is not None:
+        grid_out = os.path.join(raw_save_dir, f"{output_prefix}_grid.json")
+        with open(grid_out, "w", encoding="utf-8") as f:
+            json.dump({"shape": list(arr_corrected.shape), **grid}, f)
+        print(f"  Saved grid: {grid_out}")
+
 def main():
     args = parse_args()
     os.makedirs(args.raw_save_dir, exist_ok=True)
@@ -152,18 +178,26 @@ def main():
 
     print(f"Found {len(array_specs)} arrays to process.")
 
-    for array_path, arr_proxy, output_prefix in array_specs:
+    for array_path, arr_proxy, output_prefix, grid in array_specs:
         try:
             process_and_save_array(
                 array_path, arr_proxy, output_prefix, args.raw_save_dir,
                 args.mask_save_dir, args.gaussian_sigma, args.threshold_method,
-                args.fixed_threshold, args.percentile
+                args.fixed_threshold, args.percentile, grid=grid
             )
             processed += 1
         except Exception:
             logging.exception(f"  ERROR processing {array_path}")
 
     print(f"\nDONE. Processed {processed}/{len(array_specs)} arrays.")
+    # A missing raw volume means no mask for the inference channel, or no
+    # intensity summary for the other one. Fail the task, instead of letting the
+    # correction step skip the tile without saying so.
+    if processed < len(array_specs):
+        sys.exit(
+            f"ERROR: {len(array_specs) - processed} of {len(array_specs)} arrays "
+            "failed to preprocess; see the traceback above."
+        )
 
 if __name__ == "__main__":
     main()

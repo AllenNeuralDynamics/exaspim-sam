@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 import sys
 
 import zarr
@@ -14,15 +13,20 @@ from utils import TILE_PATH_RE, collect_tile_paths, load_tile_paths
 CHANNELS = ("488", "561")
 LARGER_CHANNEL_RES = 4
 SMALLER_CHANNEL_RES = 1
+# A channel counts as binned only when its level-0 YX extent is at least this many
+# times smaller than the other channel's along both y and x. Binned exaSPIM channels
+# are 8x smaller in YX, so their level 1 matches the other channel's level 4.
+BINNED_YX_MIN_RATIO = 1.5
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Infer 488/561 resolution levels by comparing level-0 array sizes "
-            "for the first paired tile in a parent SPIM.ome.zarr group or "
-            "tile_paths JSON file. "
-            "Equal channel sizes use resolution level 4 for both channels."
+            "Infer 488/561 resolution levels by comparing the level-0 YX "
+            "extent of the first paired tile in a parent SPIM.ome.zarr group "
+            "or tile_paths JSON file. A channel at least 1.5x smaller in both "
+            "y and x is binned and uses level 1; otherwise both channels use "
+            "level 4, whatever their z steps."
         )
     )
     source = parser.add_mutually_exclusive_group(required=True)
@@ -93,19 +97,31 @@ def get_level_zero_shape_from_path(tile_path: str) -> tuple[int, ...]:
         ) from exc
 
 
+def is_binned_relative_to(
+    shape: tuple[int, ...], other_shape: tuple[int, ...]
+) -> bool:
+    """True when ``shape`` is binned relative to ``other_shape``.
+
+    Only the YX extent (the last two axes) counts. A channel acquired with a
+    coarser z step but the same pixel size has fewer z slices, yet it is not
+    binned: reading it at level 1 would load a near full-resolution volume.
+    """
+    return all(
+        other >= BINNED_YX_MIN_RATIO * own
+        for own, other in zip(shape[-2:], other_shape[-2:])
+    )
+
+
 def infer_resolutions_from_shapes(
     shape_488: tuple[int, ...], shape_561: tuple[int, ...], reference_tile: str
 ) -> tuple[int, int, str]:
-    size_488 = math.prod(shape_488)
-    size_561 = math.prod(shape_561)
-
-    if size_488 == size_561:
-        return LARGER_CHANNEL_RES, LARGER_CHANNEL_RES, reference_tile
-
-    if size_488 > size_561:
+    if is_binned_relative_to(shape_561, shape_488):
         return LARGER_CHANNEL_RES, SMALLER_CHANNEL_RES, reference_tile
 
-    return SMALLER_CHANNEL_RES, LARGER_CHANNEL_RES, reference_tile
+    if is_binned_relative_to(shape_488, shape_561):
+        return SMALLER_CHANNEL_RES, LARGER_CHANNEL_RES, reference_tile
+
+    return LARGER_CHANNEL_RES, LARGER_CHANNEL_RES, reference_tile
 
 
 def infer_resolutions(zarr_path: str) -> tuple[int, int, str]:
